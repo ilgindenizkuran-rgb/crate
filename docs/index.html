@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crate · swipe to dig for music</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* One dark world: plum background, a record-sleeve card in the middle, three actions under it. */
+:root {
+  --bg: #17121d;
+  --panel: #231b2c;
+  --line: #3a2e47;
+  --ink: #f6efe6;
+  --muted: #a999b8;
+  --like: #5fd3a2;
+  --pass: #ff6b5a;
+  --super: #ffc857;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.45; overflow-x: hidden; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--super); outline-offset: 2px; }
+.app { max-width: 460px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding: 14px 16px 20px; gap: 12px; }
+header { display: flex; align-items: center; gap: 10px; }
+.logo { font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: -0.02em; margin-right: auto; }
+.logo span { color: var(--super); }
+.icon-btn { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; min-height: 40px; padding: 0 14px; font-weight: 500; font-size: 14px; }
+.icon-btn[aria-pressed="true"] { border-color: var(--super); color: var(--super); }
+
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 14px; color: var(--muted); white-space: nowrap; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.rule { color: var(--muted); font-size: 13px; min-height: 19px; margin: -4px 2px 0; }
+
+.stage { position: relative; flex: 1; min-height: 430px; }
+.card { position: absolute; inset: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; touch-action: none; user-select: none; will-change: transform; }
+.card.behind { transform: scale(0.95) translateY(14px); opacity: 0.55; }
+.art { position: relative; flex: 1; min-height: 0; background: #0e0a12 center/cover no-repeat; }
+.badge { position: absolute; top: 12px; left: 12px; background: rgba(23,18,29,.82); border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.badge.artist { color: var(--super); }
+.stamp { position: absolute; top: 26px; font-family: var(--display); font-weight: 800; font-size: 34px; padding: 2px 14px; border: 4px solid; border-radius: 12px; opacity: 0; text-transform: uppercase; }
+.stamp.like { left: 18px; color: var(--like); transform: rotate(-12deg); }
+.stamp.pass { right: 18px; color: var(--pass); transform: rotate(12deg); }
+.stamp.super { left: 50%; top: auto; bottom: 20px; color: var(--super); transform: translateX(-50%); }
+.bar { height: 4px; background: var(--line); }
+.bar i { display: block; height: 100%; width: 0; background: var(--super); }
+.meta { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
+.title { font-family: var(--display); font-weight: 700; font-size: 23px; line-height: 1.12; overflow-wrap: anywhere; }
+.artistname { color: var(--muted); font-weight: 500; overflow-wrap: anywhere; }
+.why { font-size: 13px; color: var(--super); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; }
+.tag { font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; color: var(--muted); }
+
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; color: var(--muted); padding: 24px; border: 1px dashed var(--line); border-radius: 22px; }
+.empty b { color: var(--ink); font-family: var(--display); font-size: 20px; }
+
+.actions { display: flex; justify-content: center; align-items: center; gap: 18px; }
+.act { width: 64px; height: 64px; border-radius: 50%; border: 2px solid; background: var(--panel); font-size: 26px; line-height: 1; display: grid; place-items: center; }
+.act.pass { border-color: var(--pass); color: var(--pass); }
+.act.like { border-color: var(--like); color: var(--like); }
+.act.super { border-color: var(--super); color: var(--super); width: 52px; height: 52px; font-size: 20px; }
+.hint { text-align: center; color: var(--muted); font-size: 12px; }
+
+.toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 500; font-size: 14px; max-width: calc(100% - 32px); opacity: 0; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+.sheet { position: fixed; inset: 0; background: var(--bg); overflow-y: auto; display: none; }
+.sheet.open { display: block; }
+.sheet .inner { max-width: 460px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+.sheet h2 { font-family: var(--display); font-size: 26px; margin: 0; }
+.sheet h3 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; }
+.sheet p { margin: 0; color: var(--muted); }
+label { font-size: 14px; font-weight: 500; display: flex; flex-direction: column; gap: 6px; }
+input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; min-height: 44px; width: 100%; }
+code { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: block; overflow-wrap: anywhere; font-size: 13px; }
+.btn { background: var(--ink); color: var(--bg); border: 0; border-radius: 12px; min-height: 48px; padding: 0 18px; font-weight: 700; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; }
+.statline { display: grid; grid-template-columns: 130px 1fr 34px; gap: 10px; align-items: center; font-size: 14px; }
+.statline .track { height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+.statline .track i { display: block; height: 100%; background: var(--like); }
+.statline.no .track i { background: var(--pass); }
+.statline span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recent { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.recent div { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.recent small { color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .card.fly { transition: transform .28s ease-in, opacity .28s; }
+  .card.back { transition: transform .2s; }
+  .toast { transition: opacity .2s; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">crate<span>.</span></div>
+    <button class="icon-btn" id="btn-sound" aria-pressed="true">sound on</button>
+    <button class="icon-btn" id="btn-taste">taste</button>
+    <button class="icon-btn" id="btn-setup">setup</button>
+  </header>
+  <div class="chips" id="chips" role="tablist" aria-label="What to dig for"></div>
+  <div class="rule" id="rule"></div>
+  <div class="stage" id="stage"></div>
+  <div class="actions">
+    <button class="act pass" id="act-pass" aria-label="Pass">✕</button>
+    <button class="act super" id="act-super" aria-label="Save and add to replay">★</button>
+    <button class="act like" id="act-like" aria-label="Save to liked songs">♥</button>
+  </div>
+  <div class="hint" id="hint">swipe or use ← → ↑ · space pauses</div>
+</div>
+
+<section class="sheet" id="sheet-setup" aria-label="Setup">
+  <div class="inner">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2>Setup</h2><button class="icon-btn" data-close>close</button>
+    </div>
+    <p>crate plays 30-second previews of songs you have not saved yet. Swipe right to save a song to your Spotify liked songs, left to never see it again, up to also add it to your replay playlist.</p>
+    <h3>1 · Spotify app</h3>
+    <p>Create an app at developer.spotify.com/dashboard (needs Premium) and add this exact Redirect URI to it:</p>
+    <code id="redirect"></code>
+    <label>Spotify Client ID <input type="text" id="in-client" autocomplete="off" spellcheck="false"></label>
+    <h3>2 · Last.fm</h3>
+    <p>Recommendations and tags come from Last.fm. Get a free key at last.fm/api/account/create.</p>
+    <label>Last.fm API key <input type="text" id="in-lastfm" autocomplete="off" spellcheck="false"></label>
+    <div class="row">
+      <button class="btn" id="btn-connect">Save and connect Spotify</button>
+      <button class="btn ghost" id="btn-demo">Try the demo deck</button>
+    </div>
+    <p id="status"></p>
+    <h3>Housekeeping</h3>
+    <div class="row">
+      <button class="btn ghost" id="btn-resync">Re-read my liked songs</button>
+      <button class="btn ghost" id="btn-forget">Forget passed songs</button>
+      <button class="btn ghost" id="btn-signout">Sign out</button>
+    </div>
+    <p>Keys and tokens stay in this browser only. Nothing is sent anywhere except Spotify, Last.fm, Deezer and Apple.</p>
+  </div>
+</section>
+
+<section class="sheet" id="sheet-taste" aria-label="Taste profile">
+  <div class="inner">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2>Your taste</h2><button class="icon-btn" data-close>close</button>
+    </div>
+    <p id="taste-sum"></p>
+    <h3>Tags you keep saying yes to</h3>
+    <div id="taste-yes"></div>
+    <h3>Tags you keep passing on</h3>
+    <div id="taste-no"></div>
+    <h3>Recently saved</h3>
+    <div class="recent" id="taste-recent"></div>
+  </div>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<audio id="audio" preload="auto"></audio>
+
+<script>
+"use strict";
+/* ---------- small helpers ---------- */
+var $ = function (s) { return document.querySelector(s); };
+var store = {
+  get: function (k, d) { try { var v = localStorage.getItem("crate." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: function (k, v) { try { localStorage.setItem("crate." + k, JSON.stringify(v)); } catch (e) {} },
+  del: function (k) { try { localStorage.removeItem("crate." + k); } catch (e) {} }
+};
+function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function norm(s) {
+  return String(s || "").toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .replace(/\s-\s.*$/, " ")
+    .replace(/\b(feat|ft|with)\.?\s.*$/, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+function keyOf(artist, title) { return norm(artist) + "|" + norm(title); }
+var toastTimer;
+function toast(msg) { var t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2400); }
+
+var jsonpN = 0;
+function jsonp(url, param) {
+  return new Promise(function (resolve, reject) {
+    var name = "__crate_cb" + (++jsonpN);
+    var s = document.createElement("script");
+    var timer = setTimeout(function () { done(); reject(new Error("timeout")); }, 8000);
+    function done() { clearTimeout(timer); delete window[name]; s.remove(); }
+    window[name] = function (data) { done(); resolve(data); };
+    s.onerror = function () { done(); reject(new Error("network")); };
+    s.src = url + (url.indexOf("?") > -1 ? "&" : "?") + (param || "callback") + "=" + name;
+    document.head.appendChild(s);
+  });
+}
+
+/* ---------- state ---------- */
+var REDIRECT = location.origin + location.pathname;
+var SCOPES = "user-library-read user-library-modify user-follow-modify playlist-read-private playlist-modify-private playlist-modify-public";
+var cfg = store.get("cfg", { client: "", lastfm: "" });
+var seen = store.get("seen", {});          // key -> 1, never shown again
+var stats = store.get("stats", { yes: {}, no: {}, liked: 0, passed: 0, recent: [] });
+var library = store.get("library", null);   // { at, keys:{}, artists:{}, seeds:[[artist,title]] }
+var taste = { super_playlist: "replay", playlists: [] };
+var demo = false;
+var source = store.get("source", "mix");
+var queue = [];
+var filling = false;
+var dry = false;
+var soundOn = true;
+var audio = $("#audio");
+
+/* ---------- Spotify (PKCE, no secret) ---------- */
+function b64url(buf) { return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+async function login() {
+  var arr = new Uint8Array(48); crypto.getRandomValues(arr);
+  var verifier = b64url(arr);
+  var digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  store.set("verifier", verifier);
+  location.href = "https://accounts.spotify.com/authorize?" + new URLSearchParams({
+    client_id: cfg.client, response_type: "code", redirect_uri: REDIRECT,
+    code_challenge_method: "S256", code_challenge: b64url(digest), scope: SCOPES
+  });
+}
+async function tokenRequest(params) {
+  var r = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(Object.assign({ client_id: cfg.client }, params))
+  });
+  var j = await r.json();
+  if (!r.ok) throw new Error(j.error_description || j.error || "token error");
+  var old = store.get("token", {});
+  store.set("token", { access: j.access_token, refresh: j.refresh_token || old.refresh, exp: Date.now() + (j.expires_in - 60) * 1000 });
+}
+async function accessToken() {
+  var t = store.get("token", null);
+  if (!t) throw new Error("not signed in");
+  if (Date.now() > t.exp) { await tokenRequest({ grant_type: "refresh_token", refresh_token: t.refresh }); t = store.get("token"); }
+  return t.access;
+}
+async function spotify(method, path, body) {
+  for (var attempt = 0; attempt < 3; attempt++) {
+    var r = await fetch("https://api.spotify.com/v1" + path, {
+      method: method,
+      headers: Object.assign({ Authorization: "Bearer " + await accessToken() }, body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (r.status === 429) { await sleep((Number(r.headers.get("Retry-After")) || 2) * 1000); continue; }
+    if (r.status === 401 && attempt === 0) { var t = store.get("token"); t.exp = 0; store.set("token", t); continue; }
+    if (!r.ok) throw new Error("Spotify " + r.status + " on " + path.split("?")[0]);
+    var text = await r.text();
+    return text ? JSON.parse(text) : {};
+  }
+  throw new Error("Spotify is rate limiting, try again in a minute");
+}
+function signedIn() { return !!store.get("token", null); }
+
+async function syncLibrary(force) {
+  if (!force && library && Date.now() - library.at < 24 * 3600 * 1000) return;
+  var lib = { at: Date.now(), keys: {}, artists: {}, seeds: [] };
+  var offset = 0;
+  while (true) {
+    setStatus("Reading your liked songs… " + offset);
+    var page = await spotify("GET", "/me/tracks?limit=50&offset=" + offset);
+    (page.items || []).forEach(function (it) {
+      var t = it.track; if (!t) return;
+      var a = (t.artists && t.artists[0] && t.artists[0].name) || "";
+      lib.keys[keyOf(a, t.name)] = 1;
+      (t.artists || []).forEach(function (x) { lib.artists[norm(x.name)] = (lib.artists[norm(x.name)] || 0) + 1; });
+      lib.seeds.push([a, t.name]);
+    });
+    offset += 50;
+    if (!page.next || !(page.items || []).length) break;
+  }
+  library = lib; store.set("library", lib);
+  setStatus("Read " + lib.seeds.length + " liked songs.");
+}
+
+function bestMatch(items, artist, title, nameOf, artistOf) {
+  var na = norm(artist), nt = norm(title), best = null;
+  items.forEach(function (it) {
+    var ia = norm(artistOf(it)), iname = norm(nameOf(it));
+    var artistOk = ia && (ia === na || ia.indexOf(na) > -1 || na.indexOf(ia) > -1);
+    var titleOk = title == null || iname === nt || iname.indexOf(nt) === 0 || nt.indexOf(iname) === 0;
+    if (artistOk && titleOk && !best) best = it;
+  });
+  return best;
+}
+async function findTrackUri(card) {
+  var q1 = 'track:"' + card.title + '" artist:"' + card.artist + '"';
+  var queries = [q1, card.artist + " " + card.title];
+  for (var i = 0; i < queries.length; i++) {
+    var r = await spotify("GET", "/search?type=track&limit=5&q=" + encodeURIComponent(queries[i]));
+    var hit = bestMatch((r.tracks && r.tracks.items) || [], card.artist, card.title,
+      function (t) { return t.name; }, function (t) { return (t.artists || []).map(function (a) { return a.name; }).join(" "); });
+    if (hit) return hit.uri;
+  }
+  return null;
+}
+async function findArtistUri(name) {
+  var r = await spotify("GET", "/search?type=artist&limit=5&q=" + encodeURIComponent(name));
+  var hit = bestMatch((r.artists && r.artists.items) || [], name, null, function () { return ""; }, function (a) { return a.name; });
+  return hit ? hit.uri : null;
+}
+async function saveUris(uris) { await spotify("PUT", "/me/library?uris=" + encodeURIComponent(uris.join(","))); }
+async function superPlaylistId() {
+  var cached = store.get("superId", null); if (cached) return cached;
+  var want = String(taste.super_playlist || "replay").toLowerCase();
+  var r = await spotify("GET", "/me/playlists?limit=50");
+  var hit = (r.items || []).filter(function (p) { return p && String(p.name).toLowerCase() === want; })[0];
+  if (hit) store.set("superId", hit.id);
+  return hit ? hit.id : null;
+}
+
+/* ---------- Last.fm ---------- */
+async function lastfm(method, params) {
+  var qs = new URLSearchParams(Object.assign({ method: method, api_key: cfg.lastfm, format: "json", autocorrect: "1" }, params));
+  var r = await fetch("https://ws.audioscrobbler.com/2.0/?" + qs);
+  var j = await r.json();
+  if (j.error) throw new Error("Last.fm: " + j.message);
+  return j;
+}
+function asList(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
+var JUNK_TAGS = /^(seen live|favorites?|favourites?|my .*|.*\d{4}.*|love|awesome|beautiful|spotify|under \d+ listeners)$/i;
+async function loadTags(card) {
+  if (card.tags || !cfg.lastfm) return card.tags || [];
+  var tags = [];
+  try {
+    var j = await lastfm("track.gettoptags", { artist: card.artist, track: card.title });
+    tags = asList(j.toptags && j.toptags.tag);
+    if (tags.length < 2) { j = await lastfm("artist.gettoptags", { artist: card.artist }); tags = asList(j.toptags && j.toptags.tag); }
+  } catch (e) {}
+  var na = norm(card.artist);
+  card.tags = tags.map(function (t) { return String(t.name).toLowerCase(); })
+    .filter(function (t) { return !JUNK_TAGS.test(t) && norm(t) !== na && t.length < 24; }).slice(0, 4);
+  return card.tags;
+}
+
+/* ---------- where cards come from ---------- */
+function currentPlaylist() { return taste.playlists.filter(function (p) { return p.id === source; })[0] || null; }
+function known(artist, title) { var k = keyOf(artist, title); return seen[k] || (library && library.keys[k]) || queue.some(function (c) { return c.key === k; }); }
+
+async function fromSimilarTracks(seed) {
+  var j = await lastfm("track.getsimilar", { artist: seed[0], track: seed[1], limit: 15 });
+  return shuffle(asList(j.similartracks && j.similartracks.track)).map(function (t) {
+    return { type: "track", artist: t.artist.name, title: t.name, why: "because you saved " + seed[1] + " by " + seed[0] };
+  });
+}
+async function fromSimilarArtists(seedArtist, asArtistCards) {
+  var j = await lastfm("artist.getsimilar", { artist: seedArtist, limit: 12 });
+  var artists = shuffle(asList(j.similarartists && j.similarartists.artist))
+    .filter(function (a) { return !(library && library.artists[norm(a.name)]); }).slice(0, 3);
+  var out = [];
+  for (var i = 0; i < artists.length; i++) {
+    var tt = await lastfm("artist.gettoptracks", { artist: artists[i].name, limit: 4 });
+    var tracks = asList(tt.toptracks && tt.toptracks.track);
+    if (!tracks.length) continue;
+    var t = asArtistCards ? tracks[0] : pick(tracks);
+    out.push({ type: asArtistCards ? "artist" : "track", artist: artists[i].name, title: t.name, why: "fans of " + seedArtist + " also listen to this" });
+  }
+  return out;
+}
+async function fromTag(tag) {
+  var j = await lastfm("tag.gettoptracks", { tag: tag, limit: 30, page: 1 + Math.floor(Math.random() * 6) });
+  return shuffle(asList(j.tracks && j.tracks.track)).map(function (t) {
+    return { type: "track", artist: t.artist.name, title: t.name, why: "tagged " + tag + " on Last.fm" };
+  });
+}
+async function fromDemo() {
+  var j = await jsonp("https://api.deezer.com/chart/0/tracks?limit=60&output=jsonp");
+  return shuffle(j.data || []).map(function (t) {
+    return { type: "track", artist: t.artist.name, title: t.title_short || t.title, why: "demo deck · Deezer chart", preview: t.preview, art: t.album && (t.album.cover_big || t.album.cover_medium) };
+  });
+}
+function randomSeed() {
+  var s = library.seeds; if (!s.length) return null;
+  return Math.random() < 0.5 ? pick(s.slice(0, 120)) : pick(s);   // lean towards what was saved recently
+}
+function likedTags() {
+  return Object.keys(stats.yes).filter(function (t) { return stats.yes[t] >= 2 && stats.yes[t] > (stats.no[t] || 0); });
+}
+async function candidates() {
+  if (demo) return fromDemo();
+  var p = currentPlaylist(), roll = Math.random();
+  if (p) {
+    if (roll < 0.4 && p.tags.length) return fromTag(pick(p.tags));
+    return fromSimilarArtists(pick(p.anchors), roll > 0.8);
+  }
+  var seed = randomSeed();
+  var allTags = likedTags().concat.apply(likedTags(), taste.playlists.map(function (x) { return x.tags; }));
+  if (!seed || (roll < 0.25 && allTags.length)) return fromTag(pick(allTags));
+  if (roll < 0.45) return fromSimilarArtists(seed[0], true);
+  return fromSimilarTracks(seed);
+}
+
+/* ---------- previews: Deezer first, Apple as fallback ---------- */
+async function findPreview(card) {
+  if (card.preview) return true;
+  try {
+    var d = await jsonp("https://api.deezer.com/search?limit=5&output=jsonp&q=" + encodeURIComponent('artist:"' + card.artist + '" track:"' + card.title + '"'));
+    var hit = bestMatch((d.data || []).filter(function (x) { return x.preview; }), card.artist, card.title,
+      function (x) { return x.title; }, function (x) { return x.artist.name; });
+    if (hit) { card.preview = hit.preview; card.art = hit.album && (hit.album.cover_big || hit.album.cover_medium); return true; }
+  } catch (e) {}
+  try {
+    var a = await jsonp("https://itunes.apple.com/search?media=music&entity=song&limit=5&term=" + encodeURIComponent(card.artist + " " + card.title));
+    var hit2 = bestMatch((a.results || []).filter(function (x) { return x.previewUrl; }), card.artist, card.title,
+      function (x) { return x.trackName; }, function (x) { return x.artistName; });
+    if (hit2) { card.preview = hit2.previewUrl; card.art = String(hit2.artworkUrl100 || "").replace("100x100", "600x600"); return true; }
+  } catch (e) {}
+  return false;
+}
+
+async function fill() {
+  if (filling) return;
+  filling = true; dry = false;
+  try {
+    for (var round = 0; round < 6 && queue.length < 6; round++) {
+      var list = [];
+      try { list = await candidates(); } catch (e) { console.warn(e); }
+      var added = 0;
+      for (var i = 0; i < list.length && queue.length < 8 && added < 4; i++) {
+        var c = list[i];
+        if (!c.artist || !c.title || known(c.artist, c.title)) continue;
+        c.key = keyOf(c.artist, c.title);
+        if (await findPreview(c)) { queue.push(c); added++; if (queue.length <= 2) render(); }
+      }
+    }
+    if (!queue.length) dry = true;
+  } finally { filling = false; render(); }
+}
+
+/* ---------- rendering ---------- */
+function setStatus(msg) { $("#status").textContent = msg; if (!queue.length) render(msg); }
+function buildCard(card, behind) {
+  var c = el("article", "card" + (behind ? " behind" : ""));
+  var art = el("div", "art"); if (card.art) art.style.backgroundImage = 'url("' + String(card.art).replace(/"/g, "") + '")';
+  art.appendChild(el("span", "badge" + (card.type === "artist" ? " artist" : ""), card.type === "artist" ? "artist" : "song"));
+  art.appendChild(el("span", "stamp like", card.type === "artist" ? "follow" : "save"));
+  art.appendChild(el("span", "stamp pass", "pass"));
+  art.appendChild(el("span", "stamp super", card.type === "artist" ? "follow + save" : "replay"));
+  var bar = el("div", "bar"); bar.appendChild(el("i"));
+  var meta = el("div", "meta");
+  meta.appendChild(el("div", "title", card.type === "artist" ? card.artist : card.title));
+  meta.appendChild(el("div", "artistname", card.type === "artist" ? "playing: " + card.title : card.artist));
+  meta.appendChild(el("div", "why", card.why));
+  var tags = el("div", "tags"); meta.appendChild(tags);
+  (card.tags || []).forEach(function (t) { tags.appendChild(el("span", "tag", t)); });
+  c.appendChild(art); c.appendChild(bar); c.appendChild(meta);
+  return c;
+}
+var topEl = null, topCard = null;
+function render(msg) {
+  var stage = $("#stage");
+  var card = queue[0];
+  if (card && card === topCard && topEl && topEl.isConnected) {
+    var old = stage.querySelector(".card.behind"); if (old) old.remove();
+    if (queue[1]) stage.insertBefore(buildCard(queue[1], true), topEl);
+    return;
+  }
+  stage.textContent = ""; topEl = null; topCard = null;
+  if (!card) {
+    var e = el("div", "empty");
+    if (!demo && !signedIn()) { e.appendChild(el("b", "", "Nothing to dig yet")); e.appendChild(el("span", "", "Open setup to connect Spotify, or try the demo deck.")); }
+    else if (dry) { e.appendChild(el("b", "", "This crate is empty")); e.appendChild(el("span", "", "Pick another source above, or come back later.")); var b = el("button", "btn ghost", "Dig again"); b.onclick = fill; e.appendChild(b); }
+    else { e.appendChild(el("b", "", "Digging…")); e.appendChild(el("span", "", msg || "Finding songs you have not saved yet.")); }
+    stage.appendChild(e); audio.pause(); return;
+  }
+  if (queue[1]) stage.appendChild(buildCard(queue[1], true));
+  topCard = card; topEl = buildCard(card, false); stage.appendChild(topEl);
+  bindDrag(topEl);
+  play(card);
+  loadTags(card).then(function (tags) {
+    if (topCard !== card || !topEl) return;
+    var box = topEl.querySelector(".tags"); box.textContent = "";
+    tags.forEach(function (t) { box.appendChild(el("span", "tag", t)); });
+  });
+}
+function play(card) {
+  audio.src = card.preview; audio.muted = !soundOn;
+  var p = audio.play(); if (p && p.catch) p.catch(function () { $("#hint").textContent = "tap the card to start the music"; });
+}
+audio.addEventListener("timeupdate", function () {
+  var i = topEl && topEl.querySelector(".bar i"); if (i && audio.duration) i.style.width = (100 * audio.currentTime / audio.duration) + "%";
+});
+audio.addEventListener("playing", function () { $("#hint").textContent = "swipe or use ← → ↑ · space pauses"; });
+
+/* ---------- swiping ---------- */
+function bindDrag(node) {
+  var sx = 0, sy = 0, dx = 0, dy = 0, down = false;
+  node.addEventListener("pointerdown", function (e) { down = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; node.classList.remove("back"); node.setPointerCapture(e.pointerId); });
+  node.addEventListener("pointermove", function (e) {
+    if (!down) return; dx = e.clientX - sx; dy = e.clientY - sy;
+    node.style.transform = "translate(" + dx + "px," + Math.min(dy, 40) + "px) rotate(" + dx / 18 + "deg)";
+    node.querySelector(".stamp.like").style.opacity = Math.max(0, Math.min(1, dx / 90));
+    node.querySelector(".stamp.pass").style.opacity = Math.max(0, Math.min(1, -dx / 90));
+    node.querySelector(".stamp.super").style.opacity = Math.abs(dx) < 60 ? Math.max(0, Math.min(1, -dy / 90)) : 0;
+  });
+  function up() {
+    if (!down) return; down = false;
+    if (dx > 100) decide("like"); else if (dx < -100) decide("pass"); else if (dy < -110 && Math.abs(dx) < 80) decide("super");
+    else {
+      node.classList.add("back"); node.style.transform = "";
+      Array.prototype.forEach.call(node.querySelectorAll(".stamp"), function (s) { s.style.opacity = 0; });
+      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) { if (audio.paused) audio.play().catch(function () {}); else audio.pause(); }
+    }
+  }
+  node.addEventListener("pointerup", up); node.addEventListener("pointercancel", up);
+}
+function bump(bucket, tags) { (tags || []).forEach(function (t) { stats[bucket][t] = (stats[bucket][t] || 0) + 1; }); }
+function decide(kind) {
+  var card = queue[0]; if (!card || !topEl) return;
+  var node = topEl;
+  var to = kind === "like" ? "translate(140%,0) rotate(24deg)" : kind === "pass" ? "translate(-140%,0) rotate(-24deg)" : "translate(0,-130%)";
+  node.querySelector(".stamp." + kind).style.opacity = 1;
+  node.classList.add("fly"); node.style.transform = to; node.style.opacity = 0;
+  queue.shift(); topEl = null; topCard = null;
+  seen[card.key] = 1; store.set("seen", seen);
+  if (kind === "pass") { stats.passed++; bump("no", card.tags); }
+  else {
+    stats.liked++; bump("yes", card.tags);
+    stats.recent.unshift({ a: card.artist, t: card.title, k: kind, y: card.type }); stats.recent = stats.recent.slice(0, 30);
+    commit(card, kind);
+  }
+  store.set("stats", stats);
+  setTimeout(function () { node.remove(); render(); if (queue.length < 4) fill(); }, 240);
+}
+async function commit(card, kind) {
+  if (demo || !signedIn()) { toast(kind === "super" ? "Starred (demo, nothing saved to Spotify)" : "Saved (demo, nothing saved to Spotify)"); return; }
+  try {
+    var uris = [], trackUri = null;
+    if (card.type === "artist") { var au = await findArtistUri(card.artist); if (au) uris.push(au); }
+    if (card.type === "track" || kind === "super") { trackUri = await findTrackUri(card); if (trackUri) uris.push(trackUri); }
+    if (!uris.length) { toast("Could not find it on Spotify: " + card.title); return; }
+    await saveUris(uris);
+    if (trackUri && library) { library.keys[card.key] = 1; library.seeds.unshift([card.artist, card.title]); store.set("library", library); }
+    var msg = card.type === "artist" ? "Following " + card.artist : "Saved to liked songs";
+    if (kind === "super" && card.type === "track" && trackUri) {
+      var pid = await superPlaylistId();
+      if (pid) { await spotify("POST", "/playlists/" + pid + "/items", { uris: [trackUri] }); msg = "Saved and added to " + taste.super_playlist; }
+      else msg = "Saved (no playlist named " + taste.super_playlist + " found)";
+    }
+    toast(msg);
+  } catch (e) { toast(e.message); }
+}
+
+/* ---------- chips, sheets, taste ---------- */
+function drawChips() {
+  var box = $("#chips"); box.textContent = "";
+  var opts = demo ? [{ id: "mix", name: "demo deck" }] : [{ id: "mix", name: "mix" }].concat(taste.playlists);
+  if (!opts.some(function (o) { return o.id === source; })) source = "mix";
+  opts.forEach(function (o) {
+    var b = el("button", "chip" + (o.id === source ? " on" : ""), o.id === "mix" ? o.name : "for " + o.name);
+    b.setAttribute("role", "tab"); b.setAttribute("aria-selected", o.id === source);
+    b.onclick = function () { if (source === o.id) return; source = o.id; store.set("source", source); queue = []; drawChips(); render(); fill(); };
+    box.appendChild(b);
+  });
+  var p = currentPlaylist();
+  $("#rule").textContent = demo ? "Chart songs with previews. Nothing is saved to Spotify in the demo."
+    : p ? p.rule + " Anchors: " + p.anchors.join(", ") + "." : "A mix: songs near what you saved, new artists, and tags you keep liking.";
+}
+function drawTaste() {
+  var total = stats.liked + stats.passed;
+  $("#taste-sum").textContent = total ? "You have judged " + total + " cards and kept " + stats.liked + " (" + Math.round(100 * stats.liked / total) + "%)." : "Swipe a few cards and your taste shows up here.";
+  function lines(bucket, other, node, cls) {
+    node.textContent = "";
+    var rows = Object.keys(stats[bucket]).map(function (t) { return [t, stats[bucket][t], stats[other][t] || 0]; })
+      .filter(function (r) { return r[1] > r[2]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+    if (!rows.length) { node.appendChild(el("p", "", "Not enough swipes yet.")); return; }
+    var max = rows[0][1];
+    rows.forEach(function (r) {
+      var line = el("div", "statline" + cls); line.appendChild(el("span", "", r[0]));
+      var tr = el("div", "track"), i = el("i"); i.style.width = (100 * r[1] / max) + "%"; tr.appendChild(i); line.appendChild(tr);
+      line.appendChild(el("span", "", String(r[1]))); node.appendChild(line);
+    });
+  }
+  lines("yes", "no", $("#taste-yes"), ""); lines("no", "yes", $("#taste-no"), " no");
+  var rec = $("#taste-recent"); rec.textContent = "";
+  if (!stats.recent.length) rec.appendChild(el("p", "", "Nothing saved yet."));
+  stats.recent.forEach(function (r) { var d = el("div"); d.appendChild(document.createTextNode((r.y === "artist" ? "Followed " + r.a : r.t) + " ")); d.appendChild(el("small", "", r.y === "artist" ? "" : r.a + (r.k === "super" ? " · replay" : ""))); rec.appendChild(d); });
+}
+function openSheet(id) { document.getElementById(id).classList.add("open"); audio.pause(); }
+Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function (b) {
+  b.onclick = function () { b.closest(".sheet").classList.remove("open"); if (queue[0] && audio.src) audio.play().catch(function () {}); };
+});
+$("#btn-setup").onclick = function () { openSheet("sheet-setup"); };
+$("#btn-taste").onclick = function () { drawTaste(); openSheet("sheet-taste"); };
+$("#btn-sound").onclick = function () { soundOn = !soundOn; audio.muted = !soundOn; this.textContent = soundOn ? "sound on" : "sound off"; this.setAttribute("aria-pressed", soundOn); };
+$("#act-like").onclick = function () { decide("like"); };
+$("#act-pass").onclick = function () { decide("pass"); };
+$("#act-super").onclick = function () { decide("super"); };
+document.addEventListener("keydown", function (e) {
+  if (document.querySelector(".sheet.open") || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key === "ArrowRight") decide("like"); else if (e.key === "ArrowLeft") decide("pass"); else if (e.key === "ArrowUp") { e.preventDefault(); decide("super"); }
+  else if (e.key === " ") { e.preventDefault(); if (audio.paused) audio.play().catch(function () {}); else audio.pause(); }
+});
+
+$("#redirect").textContent = REDIRECT;
+$("#in-client").value = cfg.client; $("#in-lastfm").value = cfg.lastfm;
+$("#btn-connect").onclick = function () {
+  cfg = { client: $("#in-client").value.trim(), lastfm: $("#in-lastfm").value.trim() }; store.set("cfg", cfg);
+  if (!cfg.client || !cfg.lastfm) { setStatus("Both the Client ID and the Last.fm key are needed."); return; }
+  login().catch(function (e) { setStatus(e.message); });
+};
+$("#btn-demo").onclick = function () { demo = true; queue = []; document.getElementById("sheet-setup").classList.remove("open"); drawChips(); render(); fill(); };
+$("#btn-resync").onclick = function () { if (!signedIn()) return setStatus("Connect Spotify first."); syncLibrary(true).then(function () { queue = []; fill(); }).catch(function (e) { setStatus(e.message); }); };
+$("#btn-forget").onclick = function () { seen = {}; store.set("seen", seen); setStatus("Passed songs can show up again."); };
+$("#btn-signout").onclick = function () { ["token", "library", "superId", "verifier"].forEach(store.del); library = null; queue = []; setStatus("Signed out."); render(); };
+
+/* ---------- start ---------- */
+async function start() {
+  try { var r = await fetch("taste.json", { cache: "no-store" }); if (r.ok) taste = await r.json(); } catch (e) {}
+  taste.playlists = (taste.playlists || []).filter(function (p) { return p.id && p.anchors && p.anchors.length; });
+  taste.playlists.forEach(function (p) { p.tags = p.tags || []; });
+  var params = new URLSearchParams(location.search);
+  if (params.get("code") && store.get("verifier", null)) {
+    try { await tokenRequest({ grant_type: "authorization_code", code: params.get("code"), redirect_uri: REDIRECT, code_verifier: store.get("verifier") }); }
+    catch (e) { setStatus("Spotify sign-in failed: " + e.message); openSheet("sheet-setup"); }
+    store.del("verifier"); history.replaceState(null, "", REDIRECT);
+  } else if (params.get("error")) { setStatus("Spotify said: " + params.get("error")); history.replaceState(null, "", REDIRECT); openSheet("sheet-setup"); }
+  drawChips(); render();
+  if (signedIn() && cfg.lastfm) {
+    try { await syncLibrary(false); fill(); } catch (e) { setStatus(e.message); openSheet("sheet-setup"); }
+  } else if (!document.querySelector(".sheet.open")) openSheet("sheet-setup");
+}
+start();
+</script>
+</body>
+</html>

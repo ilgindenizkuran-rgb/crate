@@ -1,0 +1,53 @@
+{
+  "super_playlist": "replay",
+  "playlists": [
+    {
+      "id": "good_stuff",
+      "name": "the good stuff",
+      "rule": "Funk, soul, indie and indie dance with a warm groove. A bit niche, never generic.",
+      "anchors": ["Jungle", "Rikas", "Parcels"],
+      "tags": ["funk", "soul", "nu disco", "indie pop", "neo soul"],
+      "exclude": "House and techno, pop rock"
+    },
+    {
+      "id": "turkce",
+      "name": "türkçe",
+      "rule": "Timeless Turkish pop and rock.",
+      "anchors": ["Teoman", "Sezen Aksu", "mor ve ötesi"],
+      "tags": ["turkish pop", "turkish rock", "anatolian rock"],
+      "exclude": "Turkish hip hop"
+    },
+    {
+      "id": "dunya_hitleri",
+      "name": "just a 00s-10s girl",
+      "rule": "Worldwide pop and hip hop hits everyone knows. Cheesy is fine.",
+      "anchors": ["Dua Lipa", "Katy Perry", "Eminem"],
+      "tags": ["pop", "dance pop", "00s", "hip hop"],
+      "exclude": "Turkish songs, indie rock"
+    },
+    {
+      "id": "brunch",
+      "name": "the brunch playlist",
+      "rule": "Soft, unhurried Sunday morning music. Turkish and international mixed.",
+      "anchors": ["Sade", "Bülent Ortaçgil", "Olivia Dean"],
+      "tags": ["bossa nova", "acoustic", "mellow", "singer-songwriter"],
+      "exclude": "Anything loud or sad"
+    },
+    {
+      "id": "hype",
+      "name": "volume up",
+      "rule": "High energy pop, rap and R&B. Only the ones I really love.",
+      "anchors": ["Kanye West", "Kendrick Lamar", "Dua Lipa"],
+      "tags": ["hip hop", "rnb", "party"],
+      "exclude": "Slow songs"
+    },
+    {
+      "id": "sunny",
+      "name": "sunny side up",
+      "rule": "Happy, positive songs that make me smile.",
+      "anchors": ["ABBA", "Boney M.", "Harry Styles"],
+      "tags": ["feel good", "happy", "disco"],
+      "exclude": "Melancholy"
+    }
+  ]
+}

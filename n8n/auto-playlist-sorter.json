@@ -1,0 +1,327 @@
+{
+  "name": "Spotify Auto Playlist Sorter",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 12
+            }
+          ]
+        }
+      },
+      "name": "Daily 12:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "library"
+      },
+      "name": "Get liked songs",
+      "type": "n8n-nodes-base.spotify",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Spotify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var cutoff = Date.now() - 26 * 3600 * 1000;\nvar all = $input.all();\nvar out = [];\nfor (var i = 0; i < all.length; i++) {\n  var it = all[i].json;\n  var t = it.track || {};\n  if (!it.added_at || new Date(it.added_at).getTime() < cutoff) continue;\n  var artists = (t.artists || []).map(function (a) { return a.name; });\n  out.push({ json: { uri: t.uri, name: t.name, artist: artists[0] || '', artists: artists.join(', '), artistId: (t.artists && t.artists[0]) ? t.artists[0].id : '', album: t.album ? t.album.name : '', year: (t.album && t.album.release_date) ? t.album.release_date.slice(0, 4) : '' } });\n}\nreturn out;"
+      },
+      "name": "Pick new songs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.uri }}",
+        "options": {
+          "scope": "workflow"
+        }
+      },
+      "name": "Skip already processed",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://ws.audioscrobbler.com/2.0/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "method",
+              "value": "track.gettoptags"
+            },
+            {
+              "name": "artist",
+              "value": "={{ $json.artist }}"
+            },
+            {
+              "name": "track",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "autocorrect",
+              "value": "1"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Last.fm tags",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "Last.fm API key (Query Auth, name: api_key)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.spotify.com/v1/artists/{{ $(\"Pick new songs\").item.json.artistId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "spotifyOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Spotify artist genres",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        0
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Spotify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "var s = $('Pick new songs').item.json;\nvar lf = $('Last.fm tags').item.json;\nvar tags = (lf.toptags && lf.toptags.tag) ? lf.toptags.tag.slice(0, 10).map(function (t) { return t.name; }) : [];\nvar genres = $json.genres || [];\nvar lines = [\n  'Song: ' + s.name,\n  'Artist(s): ' + s.artists,\n  'Album: ' + s.album + ' (' + s.year + ')',\n  'Last.fm tags: ' + (tags.length ? tags.join(', ') : 'none'),\n  'Spotify artist genres: ' + (genres.length ? genres.join(', ') : 'none')\n];\nreturn { json: { uri: s.uri, name: s.name, artist: s.artists, tags: tags, genres: genres, prompt: lines.join('\\n') } };"
+      },
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-haiku-5-5"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}"
+            }
+          ]
+        },
+        "simplify": false,
+        "options": {
+          "system": "You classify songs into the listener's personal playlists. Use the song info, the Last.fm tags and the Spotify genres as evidence, plus what you know about the song.\nPlaylists (id: description):\n- good_stuff: funk, soul, indie, indie dance, groove. Warm, high quality, a bit niche (like Jungle, Rikas, Parcels).\n- turkce: timeless Turkish pop and rock classics.\n- dunya_hitleri: worldwide pop and hip hop hits everyone knows, can be cheesy, not Turkish.\n- brunch: soft, relaxed Sunday-morning breakfast music, Turkish or mixed.\n- hype: high energy, motivating pop, rap and R&B. Only songs that are clearly energetic and popular.\n- sunny: happy, positive, feel-good songs that make you smile.\nA song can fit several playlists. Include a playlist only if it fits well. If you do not know the song or the evidence is thin, return an empty list instead of guessing. Confidence is a number from 0 to 1.\nAnswer with JSON only, no other text: {\"playlists\":[{\"id\":\"good_stuff\",\"confidence\":0.9}],\"reason\":\"one short sentence\"}",
+          "maxTokens": 2000
+        }
+      },
+      "name": "Classify with Claude",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var map = { good_stuff: ['YOUR_PLAYLIST_ID_1', 'the good stuff'], turkce: ['YOUR_PLAYLIST_ID_2', 'turkce'], dunya_hitleri: ['YOUR_PLAYLIST_ID_3', 'just a 00s-10s girl'], brunch: ['YOUR_PLAYLIST_ID_4', 'the brunch playlist'], hype: ['YOUR_PLAYLIST_ID_5', 'volume up'], sunny: ['YOUR_PLAYLIST_ID_6', 'sunny side up'] };\nvar prompts = $('Build prompt').all();\nvar items = $input.all();\nvar out = [];\nfor (var i = 0; i < items.length; i++) {\n  var j = items[i].json;\n  var text = (j.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');\n  var parsed = { playlists: [] };\n  try { parsed = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch (e) {}\n  var song = prompts[i] ? prompts[i].json : {};\n  (parsed.playlists || []).forEach(function (p) {\n    if (map[p.id] && p.confidence >= 0.75) {\n      out.push({ json: { uri: song.uri, song: song.name, playlistId: map[p.id][0], playlist: map[p.id][1], confidence: p.confidence } });\n    }\n  });\n}\nreturn out;"
+      },
+      "name": "Decide playlists",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.spotify.com/v1/playlists/{{ $json.playlistId }}/items",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "spotifyOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ uris: [$json.uri] }) }}",
+        "options": {}
+      },
+      "name": "Add to playlist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        0
+      ],
+      "credentials": {
+        "spotifyOAuth2Api": {
+          "name": "Spotify account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 12:00": {
+      "main": [
+        [
+          {
+            "node": "Get liked songs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get liked songs": {
+      "main": [
+        [
+          {
+            "node": "Pick new songs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick new songs": {
+      "main": [
+        [
+          {
+            "node": "Skip already processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip already processed": {
+      "main": [
+        [
+          {
+            "node": "Last.fm tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last.fm tags": {
+      "main": [
+        [
+          {
+            "node": "Spotify artist genres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Spotify artist genres": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Classify with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with Claude": {
+      "main": [
+        [
+          {
+            "node": "Decide playlists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide playlists": {
+      "main": [
+        [
+          {
+            "node": "Add to playlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
