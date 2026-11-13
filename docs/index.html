@@ -216,6 +216,7 @@ var source = store.get("source", "mix");
 var queue = [];
 var filling = false;
 var dry = false;
+var lastErr = "";
 var soundOn = true;
 var audio = $("#audio");
 
@@ -422,11 +423,11 @@ async function findPreview(card) {
 
 async function fill() {
   if (filling) return;
-  filling = true; dry = false;
+  filling = true; dry = false; lastErr = "";
   try {
     for (var round = 0; round < 6 && queue.length < 6; round++) {
       var list = [];
-      try { list = await candidates(); } catch (e) { console.warn(e); }
+      try { list = await candidates(); } catch (e) { console.warn(e); lastErr = String(e && e.message || e); }
       var added = 0;
       for (var i = 0; i < list.length && queue.length < 8 && added < 4; i++) {
         var c = list[i];
@@ -471,8 +472,8 @@ function render(msg) {
   if (!card) {
     var e = el("div", "empty");
     if (!demo && !signedIn()) { e.appendChild(el("b", "", "Nothing to dig yet")); e.appendChild(el("span", "", "Open setup to connect Spotify, or try the demo deck.")); }
-    else if (dry) { e.appendChild(el("b", "", "This crate is empty")); e.appendChild(el("span", "", "Pick another source above, or come back later.")); var b = el("button", "btn ghost", "Dig again"); b.onclick = fill; e.appendChild(b); }
-    else { e.appendChild(el("b", "", "Digging…")); e.appendChild(el("span", "", msg || "Finding songs you have not saved yet.")); }
+    else if (dry) { e.appendChild(el("b", "", "This crate is empty")); e.appendChild(el("span", "", lastErr ? "Last error: " + lastErr : "Pick another source above, or come back later.")); var b = el("button", "btn ghost", "Dig again"); b.onclick = fill; e.appendChild(b); }
+    else { e.appendChild(el("b", "", "Digging…")); e.appendChild(el("span", "", msg || lastErr || "Finding songs you have not saved yet.")); }
     stage.appendChild(e); audio.pause(); return;
   }
   if (queue[1]) stage.appendChild(buildCard(queue[1], true));
