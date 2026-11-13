@@ -217,7 +217,7 @@ var queue = [];
 var filling = false;
 var dry = false;
 var lastErr = "";
-var dbg = { cand: 0, known: 0, nopreview: 0, rounds: 0 };
+var dbg = { cand: 0, known: 0, nopreview: 0, rounds: 0, perr: "" };
 var soundOn = true;
 var audio = $("#audio");
 
@@ -407,24 +407,29 @@ async function candidates() {
 /* ---------- previews: Deezer first, Apple as fallback ---------- */
 async function findPreview(card) {
   if (card.preview) return true;
+  var dz = function (x) { return x.preview; };
+  var queries = ['artist:"' + card.artist + '" track:"' + card.title + '"', card.artist + " " + card.title];
+  for (var i = 0; i < queries.length; i++) {
+    try {
+      var d = await jsonp("https://api.deezer.com/search?limit=8&output=jsonp&q=" + encodeURIComponent(queries[i]));
+      if (d && d.error) throw new Error("Deezer " + (d.error.message || d.error.type));
+      var hit = bestMatch((d.data || []).filter(dz), card.artist, card.title,
+        function (x) { return x.title; }, function (x) { return x.artist.name; });
+      if (hit) { card.preview = hit.preview; card.art = hit.album && (hit.album.cover_big || hit.album.cover_medium); return true; }
+    } catch (e) { dbg.perr = "Deezer: " + e.message; }
+  }
   try {
-    var d = await jsonp("https://api.deezer.com/search?limit=5&output=jsonp&q=" + encodeURIComponent('artist:"' + card.artist + '" track:"' + card.title + '"'));
-    var hit = bestMatch((d.data || []).filter(function (x) { return x.preview; }), card.artist, card.title,
-      function (x) { return x.title; }, function (x) { return x.artist.name; });
-    if (hit) { card.preview = hit.preview; card.art = hit.album && (hit.album.cover_big || hit.album.cover_medium); return true; }
-  } catch (e) {}
-  try {
-    var a = await jsonp("https://itunes.apple.com/search?media=music&entity=song&limit=5&term=" + encodeURIComponent(card.artist + " " + card.title));
+    var a = await jsonp("https://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + encodeURIComponent(card.artist + " " + card.title));
     var hit2 = bestMatch((a.results || []).filter(function (x) { return x.previewUrl; }), card.artist, card.title,
       function (x) { return x.trackName; }, function (x) { return x.artistName; });
     if (hit2) { card.preview = hit2.previewUrl; card.art = String(hit2.artworkUrl100 || "").replace("100x100", "600x600"); return true; }
-  } catch (e) {}
+  } catch (e) { dbg.perr = (dbg.perr ? dbg.perr + " / " : "") + "Apple: " + e.message; }
   return false;
 }
 
 async function fill() {
   if (filling) return;
-  filling = true; dry = false; lastErr = ""; dbg = { cand: 0, known: 0, nopreview: 0, rounds: 0 };
+  filling = true; dry = false; lastErr = ""; dbg = { cand: 0, known: 0, nopreview: 0, rounds: 0, perr: "" };
   try {
     for (var round = 0; round < 6 && queue.length < 6; round++) {
       var list = [];
@@ -474,7 +479,7 @@ function render(msg) {
   if (!card) {
     var e = el("div", "empty");
     if (!demo && !signedIn()) { e.appendChild(el("b", "", "Nothing to dig yet")); e.appendChild(el("span", "", "Open setup to connect Spotify, or try the demo deck.")); }
-    else if (dry) { e.appendChild(el("b", "", "This crate is empty")); e.appendChild(el("span", "", (lastErr ? "Last error: " + lastErr + " · " : "") + "liked " + (library ? library.seeds.length : 0) + " · found " + dbg.cand + " · known " + dbg.known + " · no preview " + dbg.nopreview)); var b = el("button", "btn ghost", "Dig again"); b.onclick = fill; e.appendChild(b); }
+    else if (dry) { e.appendChild(el("b", "", "This crate is empty")); e.appendChild(el("span", "", (lastErr ? "Last error: " + lastErr + " · " : "") + "liked " + (library ? library.seeds.length : 0) + " · found " + dbg.cand + " · known " + dbg.known + " · no preview " + dbg.nopreview + (dbg.perr ? " · " + dbg.perr : ""))); var b = el("button", "btn ghost", "Dig again"); b.onclick = fill; e.appendChild(b); }
     else { e.appendChild(el("b", "", "Digging…")); e.appendChild(el("span", "", msg || lastErr || "Finding songs you have not saved yet.")); }
     stage.appendChild(e); audio.pause(); return;
   }
